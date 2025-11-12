@@ -7,8 +7,13 @@ name: tocgen
 
 on:
   workflow_dispatch:
+  push:
+    paths:
+      - "**/*.md"
 
 permissions:
+  contents: write
+  id-token: write
 
 jobs:
   call-tocgen:
