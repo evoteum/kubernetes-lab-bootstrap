@@ -1,10 +1,13 @@
 # Ansible
 
 > [!IMPORTANT]
-> In normal operation, the lab uses zero Ansible.
+> In normal operation, the lab uses zero Ansible. You probably don't need this.
 
-We only use Ansible for bootstrapping the first node of the cluster. Tinkerbell then takes over.
+We use Ansible only for the initial setup of the very first node in the cluster. After that, Tinkerbell steps in and
+completely reprovisions that same inaugural node. Ansible is then not used until we rebuild the cluster.
 
-Yes, you did read that correctly; we actually do not use Ansible whatsoever.
+Yes, you have understood correctly. We have no Ansible in day-to-day operation at all.
+[Sorry Jeff](https://www.youtube.com/watch?v=kN0DxEj5WMI).
 
-To rebuild the cluster, please see [bootstrap](../README.md).
+We also do not run Ansible directly, as it is run as part of the bootstrapper script. To rebuild the cluster, please see
+main [README](../README.md).

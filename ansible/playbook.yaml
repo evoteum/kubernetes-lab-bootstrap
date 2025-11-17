@@ -5,15 +5,13 @@
   gather_facts: yes
 
   vars:
-    pod_network_cidr: "10.244.0.0/16"
+    argocd_manifest: "{{ argocd_manifest }}"
+    argocd_values: "{{ argocd_values }}"
     kube_config_path: /etc/kubernetes/admin.conf
-    cni_manifest: "{{ playbook_dir }}/../manifests/cni.yaml"
-    tinkerbell_manifest: "{{ playbook_dir }}/../manifests/tinkerbell.yaml"
-    argocd_manifest: "https://github.com/argoproj/argo-cd/blob/master/manifests/ha/install.yaml"
-    argocd_values: "{{ playbook_dir }}/../manifests/values-argocd.yaml"
+    kubeadm_config_src: "{{ kubeadm_config_src }}"
+    pod_network_cidr: "10.244.0.0/16"
 
   pre_tasks:
-    # Base Ubuntu system preparation
     - name: Disable swap immediately
       ansible.builtin.command: swapoff -a
       changed_when: false
@@ -80,67 +78,117 @@
       when: is_rpi
       notify: reboot_required
 
-    # Install and configure containerd + kubeadm
-    - name: Include base roles (container runtime + kubeadm setup)
+    - name: Include containerd
       include_role:
         name: geerlingguy.containerd
 
-    - include_role:
-        name: geerlingguy.kubernetes
-      vars:
-        kubernetes_role: control_plane
-        kubernetes_kubeadm_init_config_file: /etc/kubernetes/kubeadm-init.yaml
-        kubernetes_pod_network_cidr: "{{ pod_network_cidr }}"
-        kubernetes_allow_pods_on_master: true
+    - name: Add Kubernetes apt repository signing key
+      ansible.builtin.apt_key:
+        url: https://pkgs.k8s.io/core:/stable:/v1.30/deb/Release.key
+        state: present
+
+    - name: Add Kubernetes apt repository
+      ansible.builtin.apt_repository:
+        repo: >
+          deb https://pkgs.k8s.io/core:/stable:/v1.30/deb/ /
+        state: present
+        filename: kubernetes
+
+    - name: Install Kubernetes packages
+      ansible.builtin.apt:
+        name:
+          - kubelet
+          - kubeadm
+          - kubectl
+        state: present
+        update_cache: yes
+
+    - name: Hold Kubernetes packages at installed version
+      ansible.builtin.apt:
+        name:
+          - kubelet
+          - kubeadm
+          - kubectl
+        state: hold
+
+    - name: Enable and start kubelet
+      ansible.builtin.systemd:
+        name: kubelet
+        state: started
+        enabled: yes
 
   tasks:
-    - name: Ensure containerd uses systemd cgroup driver
-      ansible.builtin.replace:
-        path: /etc/containerd/config.toml
-        regexp: 'SystemdCgroup\s*=\s*false'
-        replace: 'SystemdCgroup = true'
-      notify: restart_containerd
+    - name: Create directory for kubeadm configuration
+      file:
+        path: /etc/kubeadm
+        state: directory
+        owner: root
+        group: root
+        mode: 0755
 
-    - name: Ensure kubeconfig is available to Ansible
-      ansible.builtin.stat:
-        path: "{{ kube_config_path }}"
-      register: conf
+    - name: Copy kubeadm configuration file from control machine
+      copy:
+        src: "{{ kubeadm_config_src }}"
+        dest: /etc/kubeadm/kubeadm-config.yaml
+        owner: root
+        group: root
+        mode: 0644
 
-    - name: Wait for Kubernetes API to be reachable
-      kubernetes.core.k8s_info:
+    - name: Run kubeadm init
+      command: >
+        kubeadm init
+        --config /etc/kubeadm/kubeadm-config.yaml
+        --upload-certs
+      register: kubeadm_init
+      retries: 3
+      delay: 10
+      until: kubeadm_init.rc == 0
+
+    - name: Create .kube directory for ubuntu user
+      file:
+        path: /home/ubuntu/.kube
+        state: directory
+        owner: ubuntu
+        group: ubuntu
+        mode: 0755
+
+    - name: Copy admin.conf for ubuntu user
+      copy:
+        src: /etc/kubernetes/admin.conf
+        dest: /home/ubuntu/.kube/config
+        remote_src: yes
+        owner: ubuntu
+        group: ubuntu
+        mode: 0600
+
+    - name: Export kubeconfig for subsequent tasks
+      set_fact:
+        kube_config_path: /home/ubuntu/.kube/config
+
+    - name: Add Cilium Helm repo
+      community.kubernetes.helm_repository:
+        name: cilium
+        repo_url: https://helm.cilium.io
+
+    - name: Install minimal Cilium CNI
+      community.kubernetes.helm:
+        name: cilium
+        chart_ref: cilium/cilium
+        release_namespace: kube-system
         kubeconfig: "{{ kube_config_path }}"
-        kind: Node
-      register: api_check
-      until: api_check.resources is defined
-      retries: 20
-      delay: 15
-
-    - name: Apply CNI manifest
-      kubernetes.core.k8s:
-        kubeconfig: "{{ kube_config_path }}"
-        state: present
-        src: "{{ cni_manifest }}"
+        create_namespace: false
+        values:
+          kubeProxyReplacement: "disabled"
+          k8sServiceHost: "127.0.0.1"
+          k8sServicePort: 6443
+          ipam:
+            mode: "kubernetes"
 
     - name: Apply ArgoCD manifest
       kubernetes.core.k8s:
         kubeconfig: "{{ kube_config_path }}"
         state: present
         src: "{{ argocd_manifest }}"
-
-    - name: Add Argo Helm repo
-      community.kubernetes.helm_repository:
-        name: argo
-        repo_url: https://argoproj.github.io/argo-helm
-
-    - name: Install ArgoCD via Helm
-      community.kubernetes.helm:
-        name: argocd
-        chart_ref: argo/argo-cd
-        release_namespace: argocd
-        create_namespace: true
-        values_files:
-          - "{{ argocd_values }}"
-        kubeconfig: "{{ kube_config_path }}"
 
     - name: Wait for ArgoCD server to become available
       kubernetes.core.k8s_info:
