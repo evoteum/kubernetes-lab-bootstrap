@@ -79,17 +79,9 @@ We, therefore, needed a way to provision that metal reliably and repeatably.
 You will need,
 - to install,
   - OpenTofu
+  - Python3
   - Ansible
 - A spare computer
-
-Your spare computer will go through the following stages,
-1. Ansible will make it a Kubernetes Controller
-2. Ansible will install Cluster API and Tinkerbell into the (currently single node) cluster.
-3. Tinkerbell will provision the rest of the metal
-4. Tinkerbell will reprovision the initial computer as a worker
-
-From this point, Tinkerbell has ownership over all metal and is configured by Cluster API. This means we end up with
-zero Ansible in use in our live cluster, which, from a "traditional" perspective, is remarkable. 
 
 ## Usage
 [//]: # (REQUIRED)
@@ -100,7 +92,21 @@ To build the cluster from nothing,
     - Username: ubuntu
     - password: bootstrap
 1. Connect all hosts to the kubernetes-lab VLAN
-1. run `bash/cluster_build.sh`
+2. `cp .env.example .env` and add your real values to it.
+1. run:
+
+```shell
+python3 bootstrap_runner
+```
+
+Your spare computer will go through the following stages,
+1. Ansible will make it a Kubernetes Controller
+2. Ansible will install Cluster API and Tinkerbell into the (currently single node) cluster.
+3. Tinkerbell will provision the rest of the metal
+4. Tinkerbell will reprovision the initial computer as a worker
+
+From this point, Tinkerbell has ownership over all metal and is configured by Cluster API. This means we end up with
+zero Ansible in use in our live cluster, which, from a "traditional" perspective, is remarkable.
 
 [//]: # (Extra sections)
 [//]: # (OPTIONAL)
@@ -116,9 +122,9 @@ Further documentation is in the [`docs`](docs/) directory.
 
 ## Repository Configuration
 
-> [!WARNING]  
-> This repo is controlled by OpenTofu in the [estate-repos](https://github.com/evoteum/estate-repos) repository.  
->  
+> [!WARNING]
+> This repo is controlled by OpenTofu in the [estate-repos](https://github.com/evoteum/estate-repos) repository.
+>
 > Manual configuration changes will be overwritten the next time OpenTofu runs.
 
 
