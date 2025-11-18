@@ -1,10 +1,9 @@
 from behave import given, when, then
 import os
-import shutil
 import tempfile
 
 # Import your real cleanup logic
-from python.clean import run_cleanup
+from bootstrap_runner import run_cleanup
 
 
 @given("a temporary working directory exists")
@@ -48,20 +47,20 @@ def step_run_cleanup(context):
 
 @then("the temporary directory is removed")
 def step_tmp_dir_removed(context):
-    assert not os.path.exists(context.tmp_dir), (
-        "Cleanup did not remove the temporary working directory."
-    )
+    assert not os.path.exists(
+        context.tmp_dir
+    ), "Cleanup did not remove the temporary working directory."
 
 
 @then("no provisioning or DHCP artefacts remain")
 def step_no_state_remains(context):
     # The file and directory structure created earlier should no longer exist.
-    assert not os.path.exists(context.state_file), (
-        "State file still exists after cleanup."
-    )
+    assert not os.path.exists(
+        context.state_file
+    ), "State file still exists after cleanup."
 
     # The parent directory should also be gone unless your cleanup logic preserves it deliberately.
     tofu_root = os.path.dirname(os.path.dirname(context.state_file))
-    assert not os.path.exists(tofu_root), (
-        "Provisioning directory still exists after cleanup."
-    )
+    assert not os.path.exists(
+        tofu_root
+    ), "Provisioning directory still exists after cleanup."

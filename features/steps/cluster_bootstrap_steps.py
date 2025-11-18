@@ -3,7 +3,7 @@ import os
 import tempfile
 
 # Import the real bootstrap orchestration function.
-from python.cluster_build import run_bootstrap
+from bootstrap_runner import run_bootstrap
 
 
 @given("valid environment configuration")
@@ -32,8 +32,7 @@ def step_run_bootstrap(context):
     # The behaviour test asserts only the top level result, not the internal calls.
     try:
         context.bootstrap_result = run_bootstrap(
-            tmp_dir=context.tmp_dir,
-            machine_ip=context.machine_ip
+            tmp_dir=context.tmp_dir, machine_ip=context.machine_ip
         )
     except Exception as exc:
         context.bootstrap_exception = exc
@@ -43,16 +42,14 @@ def step_run_bootstrap(context):
 def step_cluster_ready(context):
     # A real acceptance test checks observable success criteria.
     # The bootstrap_result object should have a clear success indicator.
-    assert hasattr(context, "bootstrap_exception") is False, (
-        f"Bootstrap failed with exception: {context.bootstrap_exception}"
-    )
+    assert (
+        hasattr(context, "bootstrap_exception") is False
+    ), f"Bootstrap failed with exception: {context.bootstrap_exception}"
 
-    assert context.bootstrap_result is not None, (
-        "Bootstrap tool returned no result."
-    )
+    assert context.bootstrap_result is not None, "Bootstrap tool returned no result."
 
     # The result object should indicate success in a stable, intentional way.
     # Adjust this depending on your actual return type or status model.
-    assert context.bootstrap_result.success is True, (
-        "Bootstrap tool did not report success."
-    )
+    assert (
+        context.bootstrap_result.success is True
+    ), "Bootstrap tool did not report success."

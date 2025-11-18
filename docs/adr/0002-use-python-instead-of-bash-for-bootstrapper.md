@@ -8,7 +8,7 @@ Accepted
 
 ## Context
 
-The existing bootstrap process is implemented in Bash. While Bash is suitable for simple automation, it becomes increasingly difficult to maintain as workflows grow in complexity. The current script handles environment validation, temporary workspace management, network discovery, user prompts and several external tools. These responsibilities are awkward to express cleanly in Bash and increase the likelihood of subtle defects relating to quoting, subshell behaviour and inconsistent environment inheritance across shells.
+The existing bootstrap process is implemented in Bash. While Bash is suitable for simple automation, it becomes increasingly difficult to maintain as workflows grow in complexity. The current script handles environment validation, temporary workspace management, user prompts and several external tools. These responsibilities are awkward to express cleanly in Bash and increase the likelihood of subtle defects relating to quoting, subshell behaviour and inconsistent environment inheritance across shells.
 
 Testing Bash code also introduces challenges. BATS is the most widely used option, and significant effort has been invested within the team to adopt it effectively. However, it requires vendoring as a submodule, which adds administrative overhead and complicates repository hygiene. Although BATS works well for straightforward command assertions, it is less effective for behaviour driven development or more complex orchestration involving multiple subprocesses and state transitions. Its assertions and diagnostics are comparatively limited, which makes it more difficult to write expressive tests that describe intent.
 

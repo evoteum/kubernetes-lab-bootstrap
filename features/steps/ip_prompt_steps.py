@@ -3,7 +3,7 @@ import os
 
 # Import the real validation function.
 # Adjust this import to match your codebase.
-from python.environment import validate_ip_address, InvalidIPAddressError
+from bootstrap_runner import validate_ip_address, InvalidIPAddressError
 
 
 @given("backend configuration is available")
@@ -38,31 +38,31 @@ def step_enter_valid_ip(context):
 
 @then("I am told that the address is invalid")
 def step_address_invalid(context):
-    assert context.ip_validation_error is not None, (
-        "Invalid IP address should have raised an error."
-    )
-    assert isinstance(context.ip_validation_error, InvalidIPAddressError), (
-        "Validation failed, but not with the expected InvalidIPAddressError."
-    )
+    assert (
+        context.ip_validation_error is not None
+    ), "Invalid IP address should have raised an error."
+    assert isinstance(
+        context.ip_validation_error, InvalidIPAddressError
+    ), "Validation failed, but not with the expected InvalidIPAddressError."
 
 
 @then("I am prompted to try again")
 def step_prompt_try_again(context):
     # For acceptance tests we cannot check user prompts directly.
     # Instead we assert that no valid result was returned.
-    assert context.ip_validation is None, (
-        "A valid result was returned for an invalid IP address."
-    )
+    assert (
+        context.ip_validation is None
+    ), "A valid result was returned for an invalid IP address."
 
 
 @then("the bootstrap continues")
 def step_bootstrap_continues(context):
     # Valid IP should pass without error.
-    assert context.ip_validation_error is None, (
-        f"Validation unexpectedly failed: {context.ip_validation_error}"
-    )
+    assert (
+        context.ip_validation_error is None
+    ), f"Validation unexpectedly failed: {context.ip_validation_error}"
 
     # The function should return a truthy or normalised value.
-    assert context.ip_validation is not None, (
-        "Validation should return a result for a valid IP address."
-    )
+    assert (
+        context.ip_validation is not None
+    ), "Validation should return a result for a valid IP address."
