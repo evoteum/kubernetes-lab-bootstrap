@@ -19,39 +19,6 @@ class InvalidIPAddressError(Exception):
     pass
 
 
-def validate_environment() -> bool:
-    """
-    Validate that mandatory backend configuration variables exist.
-
-    Required variables:
-      TF_BACKEND_BUCKET
-      TF_BACKEND_KEY
-      TF_BACKEND_REGION
-
-    Returns:
-        True if all variables are present.
-
-    Raises:
-        EnvironmentValidationError if any are missing.
-    """
-    required_vars = [
-        "TF_BACKEND_BUCKET",
-        "TF_BACKEND_KEY",
-        "TF_BACKEND_REGION",
-    ]
-
-    missing = [var for var in required_vars if var not in os.environ]
-
-    if missing:
-        missing_str = ", ".join(missing)
-        copyfile(src=".env.example", dst=".env")
-        raise EnvironmentValidationError(
-            f"Missing required backend configuration: {missing_str}"
-        )
-
-    return True
-
-
 def validate_ip_address(ip: str) -> str:
     """
     Validate an IPv4 address string.
