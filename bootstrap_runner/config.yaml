@@ -1,0 +1,40 @@
+apiVersion: drydock.evoteum.com/v1alpha1
+kind: BootstrapConfig
+metadata:
+  name: kubernetes-lab
+  namespace: drydock-system
+
+spec:
+  network:
+    vlanID: 8
+    cidr: "192.168.8.0/24"
+    staticIP:
+      address: "192.168.8.10"
+      gateway: "192.168.8.1"
+      nameservers:
+        - "1.1.1.1"
+        - "8.8.8.8"
+
+  discovery:
+    enabled: true
+    method: "dhcp-scan"
+    timeoutSeconds: 120
+
+  inauguralNode:
+    hostname: "inaugural-node"
+    sshUser: "ubuntu"
+    sshPassword: "bootstrap"
+
+  bootstrapSources:
+    repositories:
+      config:
+        url: "https://github.com/evoteum/kubernetes-lab-config.git"
+        branch: main
+        paths:
+          kubeadmConfig: "clusters/kubernetes-lab/kubeadm-controlplane-config.yaml"
+          argocdManifest: "clusters/kubernetes-lab/argocd-install.yaml"
+          argocdValues: "values/argocd.yaml"
+      infrastructure:
+        url: "https://github.com/evoteum/kubernetes-lab-infrastructure.git"
+        paths:
+          discoverPxe: "tinkerbell/discover.ipxe"
