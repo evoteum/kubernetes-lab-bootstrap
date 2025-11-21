@@ -1,53 +1,40 @@
 import os
 import subprocess
-from pathlib import Path
+import tempfile
 
 
-class GitCloneError(Exception):
-    pass
-
-
-def clone_repository(repo_url: str, destination: str) -> None:
+def clone_repositories(
+    repos: dict[str, any], base_dir: str | None = None
+) -> dict[str, str]:
     """
-    Clone a Git repository into the given destination directory.
-    Raises GitCloneError on failure.
+    Clone all repositories defined in bootstrapSources.repositories.
+
+    Args:
+        repos: Mapping from repository logical name to Repository model.
+        base_dir: Optional parent directory where repos should be cloned.
+
+    Returns:
+        dict mapping logical repository names -> local checkout path
     """
-    try:
-        subprocess.run(
-            ["git", "clone", "--depth=1", repo_url, destination],
-            check=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-        )
-    except subprocess.CalledProcessError as exc:
-        raise GitCloneError(
-            f"Failed to clone {repo_url} into {destination}: {exc.stderr.decode()}"
-        )
+    if base_dir is None:
+        base_dir = tempfile.mkdtemp(prefix="drydock-repos-")
 
+    results = {}
 
-def clone_required_repositories(base_dir: str) -> dict:
-    """
-    Clone all repositories required for cluster bootstrap.
+    for name, repo in repos.items():
+        repo_path = os.path.join(base_dir, name)
+        os.makedirs(repo_path, exist_ok=True)
 
-    Returns a dictionary containing paths to cloned repos:
-        {
-            "infrastructure": "...",
-            "config": "..."
-        }
-    """
+        print(f"[INFO] Cloning '{name}' from {repo.url} @ {repo.branch}")
 
-    REPOS = {
-        "infrastructure": "https://github.com/evoteum/kubernetes-lab-infrastructure.git",
-        "config": "https://github.com/evoteum/kubernetes-lab-config.git",
-    }
+        try:
+            subprocess.run(
+                ["git", "clone", "--branch", repo.branch, repo.url, repo_path],
+                check=True,
+            )
+        except subprocess.CalledProcessError as exc:
+            raise RuntimeError(f"Failed to clone repository {name}: {exc}") from exc
 
-    cloned_paths = {}
+        results[name] = repo_path
 
-    for name, url in REPOS.items():
-        destination = os.path.join(base_dir, name)
-        Path(destination).mkdir(parents=True, exist_ok=True)
-
-        clone_repository(url, destination)
-        cloned_paths[name] = destination
-
-    return cloned_paths
+    return results
