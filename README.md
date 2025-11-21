@@ -16,6 +16,15 @@
 [//]: # (Must link to local image in current repository)
 
 
+> [!IMPORTANT]
+> *Moved to [evoteum/drydock](https://github.com/evoteum/drydock)*
+>
+> As work on this project progressed, it became clear that it was
+> - bigger than originally envisaged.
+> - potentially useful outside our own lab environment.
+>
+> We therefore decided to give the project its own name, *Drydock*
+
 [//]: # (Badges)
 [//]: # (OPTIONAL)
 [//]: # (Must not have its own title)
@@ -91,7 +100,8 @@ To build the cluster from nothing,
 1. Install Ubuntu server on a computer, setting the credentials to
     - Username: ubuntu
     - password: bootstrap
-1. Connect all hosts to the kubernetes-lab VLAN
+1. Ensure SSH is enabled, as it is disabled by default.
+2. Connect all hosts to the kubernetes-lab VLAN
 2. `cp .env.example .env` and add your real values to it.
 1. run:
 
@@ -113,7 +123,6 @@ zero Ansible in use in our live cluster, which, from a "traditional" perspective
 [//]: # (This should not be called "Extra Sections".)
 [//]: # (This is a space for ≥0 sections to be included,)
 [//]: # (each of which must have their own titles.)
-
 
 
 ## Documentation
