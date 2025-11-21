@@ -2,25 +2,54 @@
 
 import sys
 import tempfile
+import argparse
+import ipaddress
 
-from dotenv import load_dotenv
 
 from bootstrap_runner.kubectl_runner import real_kubectl_apply
-
-from bootstrap_runner.ip_prompt import prompt_for_ip
 from bootstrap_runner.clean import run_cleanup, CleanupError
 from bootstrap_runner.cluster_build import run_bootstrap
 from bootstrap_runner.environment import EnvironmentValidationError
 from bootstrap_runner.orchestration import OrchestrationError
-from bootstrap_runner.git_runner import clone_required_repositories
+from bootstrap_runner.git_runner import clone_repositories
 from bootstrap_runner.ansible_runner import (
     real_ansible_playbook,
     real_ansible_requirements,
 )
-from bootstrap_runner.tofu_runner import real_tofu_init, real_tofu_apply
-from os import getenv
+from bootstrap_runner.loader import load_config
+from pathlib import Path
+import stat
+import os
 
 INDENT = " " * 8
+
+
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description="Bootstrap the inaugural Kubernetes lab node."
+    )
+
+    parser.add_argument(
+        "--ip",
+        type=str,
+        help="IP address of the inaugural Ubuntu host. "
+        "If omitted, automatic discovery will be attempted.",
+    )
+    parser.add_argument(
+        "--config",
+        default="bootstrap_runner/config.yaml",
+        help="Path to the Drydock configuration file",
+    )
+
+    return parser.parse_args()
+
+
+def validate_ip(ip_str):
+    try:
+        ipaddress.ip_address(ip_str)
+        return True
+    except ValueError:
+        return False
 
 
 def main():
@@ -30,37 +59,70 @@ def main():
     Responsibilities:
       1. Create a temporary working directory.
       2. Validate environment configuration and operator input.
-      3. Execute tofu stages and Ansible provisioning.
+      3. Execute Ansible provisioning.
       4. Report success or failure clearly.
       5. Perform cleanup unconditionally.
     """
-    load_dotenv()
+
+    args = parse_args()
+    cfg = load_config(args.config)
+
+    static_ip = cfg.spec.network.staticIP.address
+    gateway = cfg.spec.network.staticIP.gateway
+    cidr = cfg.spec.network.cidr
+    nameservers = cfg.spec.network.staticIP.nameservers
+    hostname = cfg.spec.inauguralNode.hostname
+
+    discovery_settings = cfg.spec.discovery
+    inaugural_node = cfg.spec.inauguralNode
+
+    if os.stat(args.config).st_mode & stat.S_IWOTH:
+        raise EnvironmentValidationError("Config file must not be world-writable.")
+
+    bootstrap_settings = cfg.spec.bootstrapSources
+
+    if args.ip:
+        if not validate_ip(args.ip):
+            raise ValueError(f"Invalid IP address: {args.ip}")
+        machine_ip = args.ip
+        print(f"[INFO] Using user-specified IP: {machine_ip}")
+    else:
+        print("[INFO] No IP provided. Beginning automatic discovery...")
+
     tmp_dir = tempfile.mkdtemp(prefix="k8s-lab-bootstrap-")
     print(f"[INFO] Working directory created at: {tmp_dir}")
     print("[INFO] Starting cluster bootstrap process...")
-    tofu_config_path = f"{tmp_dir}/tofu/development"
+
+    config_repo_path = Path(tmp_dir) / "config"
+    config_paths = cfg.spec.bootstrapSources.repositories["config"].paths
+
+    kubeadm_config_path = (config_repo_path / config_paths.kubeadmConfig).as_posix()
+    argocd_manifest_path = (config_repo_path / config_paths.argocdManifest).as_posix()
+    argocd_values_path = (config_repo_path / config_paths.argocdValues).as_posix()
 
     try:
         result = run_bootstrap(
+            static_ip=static_ip,
+            cidr=cidr,
+            gateway=gateway,
+            nameservers=nameservers,
+            hostname=hostname,
             tmp_dir=tmp_dir,
-            tofu_init_func=lambda: real_tofu_init(
-                config_path=tofu_config_path,
-                backend_bucket=getenv("TF_BACKEND_BUCKET"),
-                backend_region=getenv("TF_BACKEND_REGION"),
-                backend_key=getenv("TF_BACKEND_KEY"),
-            ),
-            tofu_apply_func=lambda: real_tofu_apply(
-                config_path=tofu_config_path, dhcp_enabled=True
-            ),
             ansible_playbook_func=lambda ip: real_ansible_playbook(
-                temporary_dir=tmp_dir, ip_address=ip
+                ip_address=ip,
+                kubeadm_config_src=kubeadm_config_path,
+                argocd_manifest=argocd_manifest_path,
+                argocd_values=argocd_values_path,
             ),
             ansible_install_func=lambda: real_ansible_requirements(
                 requirements_path="bootstrap_node_config/requirements.yml"
             ),
-            prompt_func=prompt_for_ip,
-            clone_func=lambda: clone_required_repositories(base_dir=tmp_dir),
+            clone_func=lambda: clone_repositories(
+                repos=bootstrap_settings.repositories,
+                base_dir=tmp_dir,
+            ),
             kubectl_apply_func=real_kubectl_apply,
+            node_ip_address=args.ip,
         )
 
         if result.success:

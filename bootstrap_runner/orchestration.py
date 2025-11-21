@@ -19,36 +19,19 @@ class OrchestrationResult:
         self.ip_prompted = ip_prompted
 
 
-def run_orchestration(
-    machine_ip: str,
-    tofu_init_func,
-    tofu_apply_func,
-    ansible_func,
-):
-    """
-    * tofu init
-    * tofu apply
-    * ansible playbook
-    """
-
+def run_orchestration(node_ip_address: str, ansible_func):
     try:
-        tofu_init_func()
-    except Exception as exc:
-        raise OrchestrationError(f"tofu init failed: {exc}") from exc
-
-    try:
-        tofu_apply_func()
-    except Exception as exc:
-        raise OrchestrationError(f"tofu apply failed: {exc}") from exc
-
-    try:
-        ansible_func(ip=machine_ip)
+        ansible_func(node_ip_address)
     except Exception as exc:
         tb = traceback.format_exc()
-        raise OrchestrationError(f"Ansible execution failed: {exc}\n{tb}") from exc
+        return OrchestrationResult(
+            success=False,
+            machine_ip=node_ip_address,
+            error_message=f"Ansible execution failed: {exc}\n{tb}",
+        )
 
     return OrchestrationResult(
         success=True,
-        machine_ip=machine_ip,
+        machine_ip=node_ip_address,
         ip_prompted=True,
     )
