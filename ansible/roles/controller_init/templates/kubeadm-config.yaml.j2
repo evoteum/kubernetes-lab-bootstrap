@@ -1,0 +1,63 @@
+---
+apiVersion: kubeadm.k8s.io/v1beta3
+kind: ClusterConfiguration
+
+# Kubernetes version (must match binaries installed on hosts)
+kubernetesVersion: stable
+
+# The HA control plane entrypoint
+# This DNS name must resolve to the HAProxy virtual IP (VIP)
+controlPlaneEndpoint: "{{ kubernetes_control_plane_endpoint }}:6443"
+
+# Networking configuration for the cluster
+networking:
+  podSubnet: "{{ kubernetes_pod_subnet | default('10.244.0.0/16') }}"
+  # Add serviceSubnet: and dnsDomain: if required
+
+# Add certificate SANs for all controllers, VIP, DNS entries and API address
+apiServer:
+  certSANs:
+    - "{{ kubernetes_control_plane_endpoint }}"
+    - "{{ api_server_vip }}"
+{% for host in groups['k8s_controllers'] %}
+    - "{{ host }}"
+    - "{{ hostvars[host].ansible_default_ipv4.address }}"
+{% endfor %}
+  extraArgs:
+    audit-log-maxage: "5"
+    audit-log-maxbackup: "5"
+    audit-log-maxsize: "50"
+    audit-log-path: "/var/log/kubernetes/audit.log"
+
+controllerManager: {}
+scheduler: {}
+
+clusterName: "{{ kubernetes_cluster_name | default('cluster') }}"
+
+---
+apiVersion: kubeadm.k8s.io/v1beta3
+kind: InitConfiguration
+
+# Each controller node must advertise its own local address
+localAPIEndpoint:
+  advertiseAddress: "{{ ansible_default_ipv4.address }}"
+  bindPort: 6443
+
+# Ensure kubeadm knows which CRI is used
+nodeRegistration:
+  criSocket: "unix:///var/run/containerd/containerd.sock"
+  name: "{{ inventory_hostname }}"
+  kubeletExtraArgs:
+    # Prevent accidental changes on multi-homed hosts
+    node-ip: "{{ ansible_default_ipv4.address }}"
+
+---
+apiVersion: kubeadm.k8s.io/v1beta3
+kind: JoinConfiguration
+
+# Nodes joining the cluster require consistent CRI and naming
+nodeRegistration:
+  criSocket: "unix:///var/run/containerd/containerd.sock"
+  name: "{{ inventory_hostname }}"
+  kubeletExtraArgs:
+    node-ip: "{{ ansible_default_ipv4.address }}"

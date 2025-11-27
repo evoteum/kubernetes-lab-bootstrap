@@ -16,14 +16,6 @@
 [//]: # (Must link to local image in current repository)
 
 
-> [!IMPORTANT]
-> *Moved to [evoteum/drydock](https://github.com/evoteum/drydock)*
->
-> As work on this project progressed, it became clear that it was
-> - bigger than originally envisaged.
-> - potentially useful outside our own lab environment.
->
-> We therefore decided to give the project its own name, *Drydock*
 
 [//]: # (Badges)
 [//]: # (OPTIONAL)
@@ -37,14 +29,17 @@
 [//]: # (Must be less than 120 characters)
 [//]: # (Must match GitHub's description)
 
-Build the Kubernetes Lab from empty metal
+Automated Kubernetes cluster deployment on metal using Ansible
 
 [//]: # (Long Description)
 [//]: # (OPTIONAL)
 [//]: # (Must not have its own title)
 [//]: # (A detailed description of the repo)
 
-Uses Ansible to build an MVP controller, so that Cluster API and Tinkerbell can take over.
+Provides a fully automated method for building a highly available Kubernetes cluster on metal using Ansible. It assumes
+each machine is already running Ubuntu and handles all remaining configuration, including preparing controller and
+worker nodes, installing the container runtime, and deploying Kubernetes components. The goal
+is a reliable, repeatable cluster build with as few opportunities for human-induced chaos as possible.
 
 ## Table of Contents
 
@@ -68,16 +63,16 @@ Uses Ansible to build an MVP controller, so that Cluster API and Tinkerbell can 
 [//]: # (OPTIONAL)
 [//]: # (May go here if it is important to highlight security concerns.)
 
-Ansible uses obvious passwords, but these are replaced by SSH key auth once Kubernetes takes over.
+This provides a vanilla Kubernetes cluster, without any security configuration. Security is configured in Kubernetes
+manifests.
 
 ## Background
 [//]: # (OPTIONAL)
 [//]: # (Explain the motivation and abstract dependencies for this repo)
 
-Running your own metal has traditionally meant herding kittens. We wanted to keep the cloud native "feel", so it should
-be as easy to replace a physical node as it is to replace a virtual one.
-
-We, therefore, needed a way to provision that metal reliably and repeatably.
+Building a Kubernetes cluster on metal is a lengthy process with many opportunities for error. This ansible playbook and
+its roles allow us to repeat the process reliably and (relatively) quickly, using the industry standard way to configure
+metal hosts.
 
 ## Install
 
@@ -85,38 +80,18 @@ We, therefore, needed a way to provision that metal reliably and repeatably.
 [//]: # (OPTIONAL IF documentation repo)
 [//]: # (ELSE REQUIRED)
 
-You will need,
-- to install,
-  - OpenTofu
-  - Python3
-  - Ansible
-- A spare computer
+- [install Ansible](https://docs.ansible.com/projects/ansible/latest/installation_guide/intro_installation.html).
 
 ## Usage
 [//]: # (REQUIRED)
 [//]: # (Explain what the thing does. Use screenshots and/or videos.)
 
-To build the cluster from nothing,
-1. Install Ubuntu server on a computer, setting the credentials to
-    - Username: ubuntu
-    - password: bootstrap
-1. Ensure SSH is enabled, as it is disabled by default.
-2. Connect all hosts to the kubernetes-lab VLAN
-2. `cp .env.example .env` and add your real values to it.
-1. run:
+1. Amend your values in [inventory.yaml](ansible/inventory.yaml)
+2. `cd ansible`
+3. Run the playbook `ansible-playbook playbook-build.yaml`
 
-```shell
-python3 bootstrap_runner
-```
-
-Your spare computer will go through the following stages,
-1. Ansible will make it a Kubernetes Controller
-2. Ansible will install Cluster API and Tinkerbell into the (currently single node) cluster.
-3. Tinkerbell will provision the rest of the metal
-4. Tinkerbell will reprovision the initial computer as a worker
-
-From this point, Tinkerbell has ownership over all metal and is configured by Cluster API. This means we end up with
-zero Ansible in use in our live cluster, which, from a "traditional" perspective, is remarkable.
+To completely destroy and rebuild the cluster, run the rebuild playbook
+`ansible-playbook playbook-rebuild.yaml`.
 
 [//]: # (Extra sections)
 [//]: # (OPTIONAL)
@@ -124,6 +99,25 @@ zero Ansible in use in our live cluster, which, from a "traditional" perspective
 [//]: # (This is a space for ≥0 sections to be included,)
 [//]: # (each of which must have their own titles.)
 
+## Drydock
+
+Many modern infrastructure automation tools struggle with,
+- mutable infrastructure: no guarantees that repeated deployments will be *exactly* the same.
+- idempotent-ish: tries to be idempotent, but gives you the freedom to stray from the path if you wish.
+- no takesies-backsies: rollbacks can be challenging.
+- drift: if something occurs outside of your code, it will not be actively detected.
+- operating system provisioning: It is generally assumed that you already have an operating system in place, but if you
+  have just purchased 3 new servers, or perhaps 300 new servers, installing an operating system on every single one is
+  a pain.
+
+[Drydock](http://github.com/evoteum/drydock) will solve this.
+
+We are building Drydock, a boostrapping system that takes you from bare metal to a
+fully functioning, highly available kubernetes cluster with (almost) zero human interaction. You'll get a cloud native
+experience on anything from a few Raspberry Pi's to a data centre full of HPE Cray Supercomputing EX4000 nodes.
+
+If you happen to have an HPE Cray Supercomputing EX4000 and are willing to let us test Drydock on it, that would be
+*amazing* lol
 
 ## Documentation
 

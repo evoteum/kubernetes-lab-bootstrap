@@ -1,0 +1,24 @@
+global
+    log /dev/log local0
+    log /dev/log local1 notice
+    daemon
+
+defaults
+    log global
+    mode tcp
+    option tcplog
+    timeout connect {{ haproxy_main_timeout_connect }}
+    timeout client  {{ haproxy_main_timeout_client }}
+    timeout server  {{ haproxy_main_timeout_server }}
+
+frontend k8s_api_frontend
+    bind {{ haproxy_main_bind_address }}:{{ haproxy_main_bind_port }}
+    default_backend k8s_api_backend
+
+backend k8s_api_backend
+    mode tcp
+{% set controller_hosts = (groups['k8s_controllers_init'] | default([]))
+                          + (groups['k8s_controllers'] | default([])) %}
+{% for host in controller_hosts %}
+    server {{ host }} {{ hostvars[host].ansible_host }}:6443 check inter {{ haproxy_main_check_interval }}
+{% endfor %}

@@ -1,6 +1,0 @@
-all:
-  hosts:
-    k8s-bootstrapper:
-      ansible_host: [set by bash]
-      ansible_user: ubuntu
-      ansible_become: true

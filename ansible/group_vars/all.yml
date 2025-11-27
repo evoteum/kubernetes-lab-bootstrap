@@ -1,0 +1,69 @@
+# Kubernetes version components
+kubernetes_major_version: "1"
+kubernetes_minor_version: "34"
+kubernetes_patch_version: "2"
+
+# Upstream package suffix
+kubernetes_package_suffix: "-1.1"
+
+# Manifest repository
+manifests_repo_url: "https://github.com/evoteum/kubernetes-lab-config.git"
+manifests_repo_version: "main"
+manifests_repo_name: "kubernetes-lab-config"
+
+# Full paths inside the Manifest repo
+argocd_root_application_manifest_path: "clusters/kubernetes-lab/root-application.yaml"
+
+kubernetes_control_plane_endpoint: "api.production.k8s.evoteum.com"
+api_server_vip: "192.168.10.250"
+keepalived_auth_pass: mj5f5KeHC0yJC8iJlx4iR5WVIE
+
+kubernetes_packages:
+  - kubelet
+  - kubeadm
+  - kubectl
+kubeconfig_path: "/home/ubuntu/.kube/config"
+helm:
+  version:
+    major: "3"
+    minor: "19"
+    patch: "2"
+  charts:
+    - name: cilium
+      create_namespace: false
+      depends_on_network: false
+      namespace: kube-system
+      label: k8s-app=cilium
+      ref: "cilium/cilium"
+      repo_url: "https://helm.cilium.io"
+      version: "1.16.4"
+      release_values:
+        kubeProxyReplacement: false
+        ipam:
+          mode: "kubernetes"
+        k8sServiceHost: "{{ api_server_vip }}"
+        k8sServicePort: 6443
+        gatewayAPI:
+          enabled: true
+    - name: argo
+      create_namespace: true
+      depends_on_network: true
+      namespace: argocd
+      ref: argo/argo-cd
+      repo_url: "https://argoproj.github.io/argo-helm"
+      version: 9.1.4
+      release_values:
+        redis-ha:
+          enabled: true
+        controller:
+          replicas: 1
+        server:
+          autoscaling:
+            enabled: true
+            minReplicas: 2
+        repoServer:
+          autoscaling:
+            enabled: true
+            minReplicas: 2
+        applicationSet:
+          replicas: 2

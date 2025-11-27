@@ -1,0 +1,50 @@
+all:
+  vars:
+    ansible_user: ubuntu
+  hosts:
+    k8s-01:
+      ansible_host: 01.nodes.production.k8s.evoteum.com
+      switch_port: 12
+
+    k8s-02:
+      ansible_host: 02.nodes.production.k8s.evoteum.com
+      switch_port: 8
+
+    k8s-03:
+      ansible_host: 03.nodes.production.k8s.evoteum.com
+      switch_port: 2
+
+    k8s-04:
+      ansible_host: 04.nodes.production.k8s.evoteum.com
+      switch_port: 6
+
+    k8s-05:
+      ansible_host: 05.nodes.production.k8s.evoteum.com
+      switch_port: 4
+
+    k8s-06:
+      ansible_host: 06.nodes.production.k8s.evoteum.com
+      switch_port: 10
+
+
+  children:
+    k8s_controllers_init:
+      hosts:
+        k8s-01:
+    k8s_controllers:
+      hosts:
+        k8s-02:
+        k8s-03:
+    k8s_workers:
+      hosts:
+        k8s-04:
+        k8s-05:
+        k8s-06:
+    haproxy:
+      hosts:
+        k8s-06:
+          keepalived_priority: 150
+          keepalived_state: MASTER
+        k8s-05:
+          keepalived_priority: 100
+          keepalived_state: BACKUP
