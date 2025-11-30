@@ -1,6 +1,4 @@
 roles:
-  - name: geerlingguy.kubernetes
-    version: 8.2.0
   - name: geerlingguy.containerd
     version: 1.4.1
 collections:

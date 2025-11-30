@@ -38,12 +38,23 @@ helm:
       repo_url: "https://helm.cilium.io"
       version: "1.16.4"
       release_values:
-        kubeProxyReplacement: false
+        kubeProxyReplacement: true
         ipam:
           mode: "kubernetes"
         k8sServiceHost: "{{ api_server_vip }}"
         k8sServicePort: 6443
         gatewayAPI:
+          enabled: true
+        operator:
+          replicas: 2
+        k8sClientRateLimit:
+          qps: 40
+          burst: 80
+        bpf:
+          masquerade: true
+          tproxy: true
+        routingMode: "tunnel"
+        metrics:
           enabled: true
     - name: argo
       create_namespace: true
