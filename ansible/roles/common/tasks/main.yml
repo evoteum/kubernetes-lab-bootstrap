@@ -1,0 +1,67 @@
+#SPDX-License-Identifier: MIT-0
+---
+# tasks file for common
+
+- name: Create .kube directory
+  ansible.builtin.file:
+    path: /home/ubuntu/.kube
+    state: directory
+    owner: ubuntu
+    group: ubuntu
+    mode: '0755'
+
+- name: Compute Kubernetes version strings
+  ansible.builtin.set_fact:
+    kubernetes_minor_string: "{{ kubernetes_major_version }}.{{ kubernetes_minor_version }}"
+    kubernetes_full_version: "{{ kubernetes_major_version }}.{{ kubernetes_minor_version }}.{{ kubernetes_patch_version }}"
+    kubernetes_cache_version: "{{ kubernetes_major_version }}.{{ kubernetes_minor_version }}.{{ kubernetes_patch_version }}{{ kubernetes_package_suffix }}"
+
+- name: Disable swap
+  ansible.builtin.command: swapoff -a
+  changed_when: false
+
+- name: Comment swap in fstab
+  ansible.builtin.replace:
+    path: /etc/fstab
+    regexp: '^([^#].*\sswap\s.*)$'
+    replace: '# \1'
+
+- name: Add Kubernetes apt signing key
+  ansible.builtin.get_url:
+    url: "https://pkgs.k8s.io/core:/stable:/v{{ kubernetes_minor_string }}/deb/Release.key"
+    dest: /etc/apt/keyrings/kubernetes-release.key
+    mode: '0644'
+
+- name: Add Kubernetes apt repository
+  ansible.builtin.apt_repository:
+    repo: "deb [signed-by=/etc/apt/keyrings/kubernetes-release.key] https://pkgs.k8s.io/core:/stable:/v{{ kubernetes_minor_string }}/deb/ /"
+    state: present
+    filename: kubernetes
+
+- name: Gather installed package facts
+  ansible.builtin.package_facts:
+    manager: auto
+
+- name: Unhold installed Kubernetes packages
+  ansible.builtin.dpkg_selections:
+    name: "{{ item }}"
+    selection: install
+  loop: "{{ kubernetes_packages }}"
+  when: item in ansible_facts.packages
+
+- name: Install pinned Kubernetes versions
+  ansible.builtin.apt:
+    name: "{{ item }}={{ kubernetes_cache_version }}"
+    state: present
+    update_cache: yes
+  loop: "{{ kubernetes_packages }}"
+
+- name: Hold Kubernetes packages
+  ansible.builtin.dpkg_selections:
+    name: "{{ item }}"
+    selection: hold
+  loop: "{{ kubernetes_packages }}"
+
+- name: Install containerd
+  include_role:
+    name: geerlingguy.containerd

@@ -1,0 +1,293 @@
+#SPDX-License-Identifier: MIT-0
+---
+# tasks file for roles/destroy
+
+- name: Gather installed package facts
+  ansible.builtin.package_facts:
+    manager: auto
+
+- name: Gather service facts
+  ansible.builtin.service_facts:
+
+- name: Delete ALL CustomResourceDefinitions
+  ansible.builtin.shell: |
+    set -o pipefail
+    kubectl get crd --no-headers 2>/dev/null | awk '{print $1}' | xargs -r kubectl delete crd
+  args:
+    warn: false
+  ignore_errors: true
+
+- name: Remove container and pod logs
+  ansible.builtin.file:
+    path: /var/log/pods
+    state: absent
+  ignore_errors: true
+
+- name: Remove container runtime logs
+  ansible.builtin.file:
+    path: /var/log/containers
+    state: absent
+  ignore_errors: true
+
+- name: kubeadm reset (only if kubeadm installed)
+  ansible.builtin.command: kubeadm reset -f
+  register: reset_out
+  when: "'kubeadm' in ansible_facts.packages"
+
+- name: Remove Kubernetes directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /etc/kubernetes
+    - /var/lib/etcd
+    - /var/lib/kubelet
+    - /var/lib/cni
+    - /etc/cni
+
+- name: Remove Cilium state directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /var/lib/cilium
+    - /etc/sysconfig/cilium
+  ignore_errors: true
+
+- name: Remove kubeconfig from user home
+  ansible.builtin.file:
+    path: /home/ubuntu/.kube/config
+    state: absent
+
+
+- name: Initialise unhold list
+  ansible.builtin.set_fact:
+    k8s_packages_to_unhold: []
+
+- name: Compute packages needing unhold
+  ansible.builtin.set_fact:
+    k8s_packages_to_unhold: "{{ k8s_packages_to_unhold | default([]) + [item] }}"
+  loop: "{{ kubernetes_packages }}"
+  when:
+    - item in ansible_facts.packages
+
+# Unhold only the packages that exist
+- name: Unhold Kubernetes packages (only if installed)
+  ansible.builtin.dpkg_selections:
+    name: "{{ item }}"
+    selection: install
+  loop: "{{ k8s_packages_to_unhold }}"
+  when: item in ansible_facts.packages
+
+- name: Uninstall Kubernetes packages
+  ansible.builtin.apt:
+    name: "{{ item }}"
+    state: absent
+    update_cache: yes
+    purge: yes
+  loop: "{{ k8s_packages_to_unhold }}"
+
+- name: Stop containerd service (only if present)
+  ansible.builtin.service:
+    name: containerd
+    state: stopped
+    enabled: no
+  when: "'containerd.service' in ansible_facts.services"
+
+- name: Remove kubelet systemd unit
+  ansible.builtin.file:
+    path: /etc/systemd/system/kubelet.service
+    state: absent
+  ignore_errors: true
+
+- name: Remove containerd state directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /var/lib/containerd
+    - /run/containerd
+    - /var/run/containerd
+
+- name: Remove containerd
+  ansible.builtin.apt:
+    name: containerd.io
+    state: absent
+    purge: yes
+
+- name: Remove CNI plugins
+  ansible.builtin.file:
+    path: /opt/cni/bin
+    state: absent
+
+- name: Remove kubelet service overrides
+  ansible.builtin.file:
+    path: /etc/systemd/system/kubelet.service.d
+    state: absent
+
+- name: Reload systemd daemon
+  ansible.builtin.systemd:
+    daemon_reload: yes
+
+- name: Flush iptables rules
+  ansible.builtin.command: iptables -F
+
+- name: Flush NAT iptables rules
+  ansible.builtin.command: iptables -t nat -F
+
+- name: Flush mangle table
+  ansible.builtin.command: iptables -t mangle -F
+
+- name: Flush raw table
+  ansible.builtin.command: iptables -t raw -F
+  ignore_errors: true
+
+- name: Flush security table
+  ansible.builtin.command: iptables -t security -F
+  ignore_errors: true
+
+- name: Remove HAProxy
+  ansible.builtin.apt:
+    name: haproxy
+    state: absent
+    purge: yes
+  when: "'haproxy' in group_names"
+
+- name: Remove keepalived
+  ansible.builtin.apt:
+    name: keepalived
+    state: absent
+    purge: yes
+  when: "'haproxy' in group_names"
+
+- name: Remove HAProxy config
+  ansible.builtin.file:
+    path: /etc/haproxy
+    state: absent
+  when: "'haproxy' in group_names"
+
+- name: Remove keepalived config
+  ansible.builtin.file:
+    path: /etc/keepalived
+    state: absent
+  when: "'haproxy' in group_names"
+
+- name: Remove all kubeconfig files
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /root/.kube
+    - /home/ubuntu/.kube
+
+- name: Check if Helm is installed
+  ansible.builtin.stat:
+    path: /usr/local/bin/helm
+  register: helm_binary
+
+- name: Remove Helm binary
+  ansible.builtin.file:
+    path: /usr/local/bin/helm
+    state: absent
+  when: helm_binary.stat.exists
+
+- name: Remove any existing Helm binaries (snap or manual)
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /usr/local/bin/helm
+    - /usr/bin/helm
+    - /snap/bin/helm
+  ignore_errors: true
+
+- name: Remove Helm snap if present
+  ansible.builtin.command: snap remove helm
+  ignore_errors: true
+
+- name: List /tmp contents
+  ansible.builtin.command: ls -1 /tmp
+  register: tmp_contents
+  changed_when: false
+
+- name: Remove items inside /tmp
+  ansible.builtin.file:
+    path: "/tmp/{{ item }}"
+    state: absent
+  loop: "{{ tmp_contents.stdout_lines }}"
+
+- name: Unmount BPF filesystem if mounted
+  ansible.builtin.shell: |
+    if mountpoint -q /sys/fs/bpf; then umount /sys/fs/bpf; fi
+  ignore_errors: true
+
+- name: Remove lingering BPF directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /sys/fs/bpf/tc
+    - /sys/fs/bpf/cilium
+    - /sys/fs/bpf/prog
+    - /sys/fs/bpf/map
+  ignore_errors: true
+
+- name: Remove kube-proxy state directory
+  ansible.builtin.file:
+    path: /var/lib/kube-proxy
+    state: absent
+  ignore_errors: true
+
+- name: Remove Kubernetes sysctl configs
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /etc/sysctl.d/k8s.conf
+    - /etc/sysctl.d/99-kubernetes-cri.conf
+    - /etc/sysctl.d/10-cilium.conf
+  ignore_errors: true
+
+- name: Reload sysctl
+  ansible.builtin.command: sysctl --system
+  ignore_errors: true
+
+- name: Remove Tinkerbell state
+  ansible.builtin.file:
+    path: /var/lib/tinkerbell
+    state: absent
+  ignore_errors: true
+
+- name: Remove cluster-api state
+  ansible.builtin.file:
+    path: /var/lib/cluster-api
+    state: absent
+  ignore_errors: true
+
+- name: Remove leftover CNI interfaces
+  ansible.builtin.shell: |
+    ip link show | grep -E "cilium|lxc|cali|flannel" | awk -F: '{print $2}' | tr -d ' ' | xargs -r -I{} ip link delete {}
+  ignore_errors: true
+
+- name: Reset resolv.conf if kubelet modified it
+  ansible.builtin.copy:
+    dest: /etc/resolv.conf
+    content: "nameserver 8.8.8.8"
+  when: ansible_facts['os_family'] == "Debian"
+  ignore_errors: true
+
+- name: Remove Kubernetes modules-load config
+  ansible.builtin.file:
+    path: /etc/modules-load.d/k8s.conf
+    state: absent
+  ignore_errors: true
+
+- name: Restore baseline DNS configuration
+  ansible.builtin.copy:
+    dest: /etc/resolv.conf
+    content: |
+      nameserver 192.168.1.1
+      nameserver 8.8.8.8
+    owner: root
+    group: root
+    mode: "0644"

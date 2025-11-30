@@ -3,6 +3,8 @@ repos:
     rev: v2.3.0
     hooks:
       - id: check-yaml
+        exclude: |
+          ^ansible/roles/cluster_addons/files/gatewayapi-standard-install.yaml$
       - id: end-of-file-fixer
       - id: trailing-whitespace
   - repo: https://github.com/psf/black

@@ -1,0 +1,135 @@
+---
+- name: Clone manifests repository
+  ansible.builtin.git:
+    depth: 1
+    repo: "{{ manifests_repo_url }}"
+    dest: "/tmp/{{ manifests_repo_name }}"
+    version: "{{ manifests_repo_version }}"
+
+- name: Verify kubeconfig exists
+  ansible.builtin.stat:
+    path: "{{ kubeconfig_path }}"
+  register: kubeconfig_file
+
+- name: Fail if kubeconfig missing
+  ansible.builtin.fail:
+    msg: "Kubeconfig {{ kubeconfig_path }} not found. Cannot install addons."
+  when: not kubeconfig_file.stat.exists
+
+- name: Add Helm repositories
+  kubernetes.core.helm_repository:
+    name: "{{ item.name }}"
+    repo_url: "{{ item.repo_url }}"
+  loop: "{{ helm.charts }}"
+
+- name: Copy Gateway API manifest to remote node
+  become: true
+  copy:
+    src: "{{ role_path }}/files/gatewayapi-standard-install.yaml"
+    dest: /tmp/gatewayapi-standard-install.yaml
+    mode: "0644"
+
+- name: Apply Gateway API CRDs (server-side, local manifest)
+  become: true
+  command: >
+    kubectl apply --server-side -f /tmp/gatewayapi-standard-install.yaml
+  environment:
+    KUBECONFIG: "{{ kubeconfig_path }}"
+
+- name: Install baseline Helm charts (no network dependency)
+  kubernetes.core.helm:
+    name: "{{ item.name }}"
+    chart_ref: "{{ item.ref }}"
+    chart_version: "{{ item.version }}"
+    release_namespace: "{{ item.namespace }}"
+    create_namespace: "{{ item.create_namespace }}"
+    kubeconfig: "{{ kubeconfig_path }}"
+    release_values: "{{ item.release_values }}"
+  loop: "{{ helm.charts | selectattr('depends_on_network', 'equalto', false) }}"
+
+- name: Wait for all Cilium pods to become Ready
+  ansible.builtin.command: >
+    kubectl --kubeconfig /home/ubuntu/.kube/config
+    -n kube-system wait --for=condition=Ready pods
+    -l k8s-app=cilium --timeout=300s
+  register: cilium_ready
+  retries: 6
+  delay: 10
+  until: cilium_ready.rc == 0
+  become: true
+
+- name: Install network dependent Helm charts
+  kubernetes.core.helm:
+    name: "{{ item.name }}"
+    chart_ref: "{{ item.ref }}"
+    chart_version: "{{ item.version }}"
+    release_namespace: "{{ item.namespace }}"
+    create_namespace: "{{ item.create_namespace }}"
+    kubeconfig: "{{ kubeconfig_path }}"
+    release_values: "{{ item.release_values }}"
+  loop: "{{ helm.charts | selectattr('depends_on_network', 'equalto', true) }}"
+
+- name: Wait for Argo CD server pods to become Ready
+  ansible.builtin.command: >
+    kubectl --kubeconfig {{ kubeconfig_path }}
+    -n {{ helm.charts | selectattr('name', 'equalto', 'argo') | map(attribute='namespace') | first }}
+    wait --for=condition=Ready pods
+    -l app.kubernetes.io/name=argocd-server
+    --timeout=300s
+  register: argo_server_ready
+  retries: 6
+  delay: 10
+  until: argo_server_ready.rc == 0
+  become: true
+
+- name: Wait for Argo CD application controller pods to become Ready
+  ansible.builtin.command: >
+    kubectl --kubeconfig {{ kubeconfig_path }}
+    -n {{ helm.charts | selectattr('name', 'equalto', 'argo') | map(attribute='namespace') | first }}
+    wait --for=condition=Ready pods
+    -l app.kubernetes.io/name=argocd-application-controller
+    --timeout=300s
+  register: argo_controller_ready
+  retries: 6
+  delay: 10
+  until: argo_controller_ready.rc == 0
+  become: true
+
+- name: Wait for Argo CD repo server pods to become Ready
+  ansible.builtin.command: >
+    kubectl --kubeconfig {{ kubeconfig_path }}
+    -n {{ helm.charts | selectattr('name', 'equalto', 'argo') | map(attribute='namespace') | first }}
+    wait --for=condition=Ready pods
+    -l app.kubernetes.io/name=argocd-repo-server
+    --timeout=300s
+  register: argo_repo_ready
+  retries: 6
+  delay: 10
+  until: argo_repo_ready.rc == 0
+  become: true
+
+- name: Ensure Argo CD directory exists
+  ansible.builtin.file:
+    path: /etc/argocd
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Install root Argo CD application manifest
+  ansible.builtin.copy:
+    src: argocd-root-application.yaml
+    dest: /etc/argocd/root-application.yaml
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Apply root Argo CD application
+  kubernetes.core.k8s:
+    state: present
+    kubeconfig: "{{ kubeconfig_path }}"
+    src: /etc/argocd/root-application.yaml
+
+- name: Output success
+  ansible.builtin.debug:
+    msg: "Cluster addons installed successfully."

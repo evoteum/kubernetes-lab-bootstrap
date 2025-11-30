@@ -1,0 +1,36 @@
+- name: Prepare nodes with common configuration
+  serial: 1
+  hosts: all
+  roles:
+    - common
+
+- name: Install LB stack
+  serial: 1
+  hosts: haproxy
+  roles:
+    - haproxy
+    - keepalived
+
+- name: Initialise primary controller
+  serial: 1
+  hosts: k8s_controllers_init
+  roles:
+    - controller_init
+
+- name: Join additional controllers
+  serial: 1
+  hosts: k8s_controllers
+  roles:
+    - controller
+
+- name: Join worker nodes
+  serial: 1
+  hosts: k8s_workers
+  roles:
+    - worker
+
+- name: Install cluster addons
+  serial: 1
+  hosts: k8s_controllers_init
+  roles:
+    - role: cluster_addons

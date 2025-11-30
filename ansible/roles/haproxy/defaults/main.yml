@@ -1,0 +1,12 @@
+---
+# Port HAProxy listens on for the Kubernetes API
+haproxy_main_bind_address: "0.0.0.0"
+haproxy_main_bind_port: 6443
+
+# Timeout settings
+haproxy_main_timeout_connect: "5s"
+haproxy_main_timeout_client: "50s"
+haproxy_main_timeout_server: "50s"
+
+# Health check interval for backend servers
+haproxy_main_check_interval: "2s"

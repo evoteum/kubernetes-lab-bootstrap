@@ -1,0 +1,8 @@
+---
+# playbook-rebuild.yaml
+
+- name: Destroy cluster
+  ansible.builtin.import_playbook: playbook-destroy.yaml
+
+- name: Build cluster
+  ansible.builtin.import_playbook: playbook-build.yaml

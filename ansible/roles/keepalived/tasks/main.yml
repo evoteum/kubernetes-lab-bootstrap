@@ -1,0 +1,41 @@
+---
+
+- name: Create Keepalived configuration directory
+  ansible.builtin.file:
+    path: /etc/keepalived
+    state: directory
+    mode: "0755"
+
+- name: Install Keepalived
+  ansible.builtin.apt:
+    name: keepalived
+    state: present
+    update_cache: true
+
+- name: Deploy Keepalived API check script
+  ansible.builtin.copy:
+    src: check_apiserver.sh
+    dest: /etc/keepalived/check_apiserver.sh
+    mode: "0755"
+    owner: root
+    group: root
+
+- name: Deploy Keepalived configuration
+  ansible.builtin.template:
+    src: keepalived.conf.j2
+    dest: /etc/keepalived/keepalived.conf
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart Keepalived
+
+- name: Ensure HAProxy is running before enabling Keepalived
+  ansible.builtin.service:
+    name: haproxy
+    state: started
+
+- name: Ensure Keepalived is enabled and running
+  ansible.builtin.service:
+    name: keepalived
+    enabled: true
+    state: started

@@ -1,0 +1,159 @@
+---
+- name: Compute Kubernetes version strings
+  ansible.builtin.set_fact:
+    kubernetes_minor_string: "{{ kubernetes_major_version }}.{{ kubernetes_minor_version }}"
+    kubernetes_full_version: "{{ kubernetes_major_version }}.{{ kubernetes_minor_version }}.{{ kubernetes_patch_version }}{{ kubernetes_package_suffix }}"
+
+- name: Load kernel modules
+  ansible.builtin.modprobe:
+    name: "{{ item }}"
+    state: present
+  loop:
+    - overlay
+    - br_netfilter
+
+- name: Persist kernel modules
+  ansible.builtin.copy:
+    dest: /etc/modules-load.d/k8s.conf
+    content: |
+      overlay
+      br_netfilter
+    mode: '0644'
+
+- name: Apply sysctl settings
+  ansible.builtin.copy:
+    dest: /etc/sysctl.d/k8s.conf
+    content: |
+      net.bridge.bridge-nf-call-iptables = 1
+      net.bridge.bridge-nf-call-ip6tables = 1
+      net.ipv4.ip_forward = 1
+    mode: '0644'
+
+- name: Reload sysctl
+  ansible.builtin.command: sysctl --system
+  changed_when: false
+
+- name: Enable kubelet
+  ansible.builtin.systemd:
+    name: kubelet
+    enabled: yes
+    state: started
+
+- name: Create kubeadm config dir
+  ansible.builtin.file:
+    path: /etc/kubeadm
+    state: directory
+    mode: '0755'
+
+- name: Copy kubeadm config
+  ansible.builtin.template:
+    src: kubeadm-config.yaml.j2
+    dest: /etc/kubeadm/kubeadm-config.yaml
+    mode: "0644"
+
+- name: Check if control plane is already initialised
+  ansible.builtin.stat:
+    path: /etc/kubernetes/kubelet.conf
+  register: kubelet_conf
+
+- name: Wait for HAProxy VIP listener
+  ansible.builtin.wait_for:
+    host: "{{ kubernetes_control_plane_endpoint }}"
+    port: 6443
+    state: started
+    delay: 1
+    timeout: 600
+
+- name: Run kubeadm init
+  ansible.builtin.command: >
+    kubeadm init
+    --config /etc/kubeadm/kubeadm-config.yaml
+    --upload-certs
+    --v=5
+  register: kubeadm_init
+  async: 1800
+  poll: 10
+  when: not kubelet_conf.stat.exists
+
+- name: Extract certificate key
+  ansible.builtin.set_fact:
+    certificate_key: "{{ kubeadm_init.stdout_lines | last | trim }}"
+  when: kubeadm_init is defined and kubeadm_init.stdout is defined
+
+- name: Copy admin.conf
+  ansible.builtin.copy:
+    src: /etc/kubernetes/admin.conf
+    dest: /home/ubuntu/.kube/config
+    remote_src: yes
+    owner: ubuntu
+    group: ubuntu
+    mode: '0600'
+
+- name: Wait for kubectl server
+  ansible.builtin.command: >
+    kubectl version --kubeconfig /home/ubuntu/.kube/config
+  register: api_up
+  retries: 30
+  delay: 10
+  until: api_up.rc == 0
+
+- name: Wait for API server via control plane endpoint
+  ansible.builtin.command: >
+    curl -k --silent --fail https://{{ kubernetes_control_plane_endpoint }}:6443/healthz
+  register: api_up
+  retries: 30
+  delay: 10
+  until: api_up.rc == 0
+
+# Provide join command for additional controllers
+- name: Generate control-plane join command
+  ansible.builtin.command: kubeadm token create --print-join-command
+  register: join_raw
+
+- name: Generate certificate key
+  ansible.builtin.command: kubeadm init phase upload-certs --upload-certs
+  register: cert_raw
+  become: true
+
+- name: Extract certificate key
+  ansible.builtin.set_fact:
+    certificate_key: "{{ cert_raw.stdout_lines | last | trim }}"
+
+- name: Build control plane join command
+  ansible.builtin.set_fact:
+    control_plane_join_cmd: "{{ join_raw.stdout }} --control-plane --certificate-key {{ certificate_key }}"
+
+- name: Save worker join command for other hosts
+  ansible.builtin.set_fact:
+    worker_join_cmd: "{{ join_raw.stdout }}"
+
+- name: Output join command
+  ansible.builtin.debug:
+    msg: "Control plane join: {{ control_plane_join_cmd }}"
+
+- name: Detect architecture
+  ansible.builtin.set_fact:
+    helm_arch: "{{ 'arm64' if ansible_architecture == 'aarch64' else 'amd64' }}"
+
+- name: Compute Helm full version string
+  ansible.builtin.set_fact:
+    helm_full_version: "{{ helm.version.major }}.{{ helm.version.minor }}.{{ helm.version.patch }}"
+
+- name: Download Helm binary
+  ansible.builtin.get_url:
+    url: "https://get.helm.sh/helm-v{{ helm_full_version }}-linux-{{ helm_arch }}.tar.gz"
+    dest: /tmp/helm.tar.gz
+    mode: '0644'
+
+- name: Extract Helm
+  ansible.builtin.unarchive:
+    src: /tmp/helm.tar.gz
+    dest: /tmp
+    remote_src: true
+
+- name: Install Helm binary
+  ansible.builtin.copy:
+    src: "/tmp/linux-{{ helm_arch }}/helm"
+    dest: /usr/local/bin/helm
+    mode: '0755'
+    remote_src: true

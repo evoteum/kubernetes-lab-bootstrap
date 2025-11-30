@@ -1,0 +1,4 @@
+- name: Prepare nodes with common configuration
+  hosts: all
+  roles:
+    - destroy

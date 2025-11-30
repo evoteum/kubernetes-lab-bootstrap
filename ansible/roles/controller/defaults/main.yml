@@ -1,0 +1,5 @@
+#SPDX-License-Identifier: MIT-0
+---
+# defaults file for controller
+kube_config_path: /home/ubuntu/.kube/config
+cilium_helm_repo: "https://helm.cilium.io"

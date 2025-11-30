@@ -1,0 +1,24 @@
+---
+- name: Validate controllers exist
+  ansible.builtin.fail:
+    msg: "No controllers found. The inventory must define k8s_controllers_init or k8s_controllers."
+  when: (groups['k8s_controllers_init'] is not defined) and (groups['k8s_controllers'] is not defined)
+
+- name: Install HAProxy
+  ansible.builtin.apt:
+    name: haproxy
+    state: present
+    update_cache: true
+
+- name: Create HAProxy configuration
+  ansible.builtin.template:
+    src: haproxy.cfg.j2
+    dest: /etc/haproxy/haproxy.cfg
+    mode: "0644"
+  notify: Restart HAProxy
+
+- name: Ensure HAProxy is enabled and running
+  ansible.builtin.service:
+    name: haproxy
+    enabled: true
+    state: started
