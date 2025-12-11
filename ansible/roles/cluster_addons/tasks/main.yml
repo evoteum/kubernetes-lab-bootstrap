@@ -1,11 +1,4 @@
 ---
-- name: Clone manifests repository
-  ansible.builtin.git:
-    depth: 1
-    repo: "{{ manifests_repo_url }}"
-    dest: "/tmp/{{ manifests_repo_name }}"
-    version: "{{ manifests_repo_version }}"
-
 - name: Verify kubeconfig exists
   ansible.builtin.stat:
     path: "{{ kubeconfig_path }}"
@@ -22,20 +15,6 @@
     repo_url: "{{ item.repo_url }}"
   loop: "{{ helm.charts }}"
 
-- name: Copy Gateway API manifest to remote node
-  become: true
-  copy:
-    src: "{{ role_path }}/files/gatewayapi-standard-install.yaml"
-    dest: /tmp/gatewayapi-standard-install.yaml
-    mode: "0644"
-
-- name: Apply Gateway API CRDs (server-side, local manifest)
-  become: true
-  command: >
-    kubectl apply --server-side -f /tmp/gatewayapi-standard-install.yaml
-  environment:
-    KUBECONFIG: "{{ kubeconfig_path }}"
-
 - name: Install baseline Helm charts (no network dependency)
   kubernetes.core.helm:
     name: "{{ item.name }}"
@@ -49,7 +28,7 @@
 
 - name: Wait for all Cilium pods to become Ready
   ansible.builtin.command: >
-    kubectl --kubeconfig /home/ubuntu/.kube/config
+    kubectl --kubeconfig {{ kubeconfig_path }}
     -n kube-system wait --for=condition=Ready pods
     -l k8s-app=cilium --timeout=300s
   register: cilium_ready
@@ -123,6 +102,7 @@
     owner: root
     group: root
     mode: "0644"
+    force: true
 
 - name: Apply root Argo CD application
   kubernetes.core.k8s:
