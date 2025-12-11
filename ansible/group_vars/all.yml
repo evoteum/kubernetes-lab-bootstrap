@@ -6,14 +6,6 @@ kubernetes_patch_version: "2"
 # Upstream package suffix
 kubernetes_package_suffix: "-1.1"
 
-# Manifest repository
-manifests_repo_url: "https://github.com/evoteum/kubernetes-lab-config.git"
-manifests_repo_version: "main"
-manifests_repo_name: "kubernetes-lab-config"
-
-# Full paths inside the Manifest repo
-argocd_root_application_manifest_path: "clusters/kubernetes-lab/root-application.yaml"
-
 kubernetes_control_plane_endpoint: "api.production.k8s.evoteum.com"
 api_server_vip: "192.168.10.250"
 keepalived_auth_pass: mj5f5KeHC0yJC8iJlx4iR5WVIE
@@ -38,6 +30,10 @@ helm:
       repo_url: "https://helm.cilium.io"
       version: "1.16.4"
       release_values:
+        ipv6:
+          enabled: false
+        envoy:
+          enabled: true
         kubeProxyReplacement: true
         ipam:
           mode: "kubernetes"
@@ -72,6 +68,9 @@ helm:
           autoscaling:
             enabled: true
             minReplicas: 2
+          service:
+            type: ClusterIP
+            port: 80
         repoServer:
           autoscaling:
             enabled: true

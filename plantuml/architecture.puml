@@ -1,0 +1,137 @@
+@startuml
+title Kubernetes Lab Bootstrap - High-level Architecture
+
+skinparam componentStyle rectangle
+skinparam nodesep 50
+skinparam ranksep 40
+
+actor "Operator" as op
+
+node "Ansible Control Host\n(kubernetes-lab-bootstrap)" as ansible {
+  component "playbook-rebuild.yaml" as rebuild
+  component "playbook-destroy.yaml" as destroy
+  component "playbook-build.yaml" as build
+
+  component "common role" as r_common
+  component "haproxy role" as r_haproxy
+  component "keepalived role" as r_keepalived
+  component "controller_init role" as r_init
+  component "controller role" as r_ctrl
+  component "worker role" as r_worker
+  component "cluster_addons role" as r_addons
+}
+
+cloud "Git" as git {
+  node "kubernetes-lab-config repo" as repo {
+    component "clusters/kubernetes-lab" as cfg_cluster
+    component "applications/" as cfg_apps
+    component "projects/" as cfg_projects
+    component "values/" as cfg_values
+  }
+}
+
+cloud "Control Plane VIP\n(api.production.k8s.evoteum.com\n192.168.10.250:6443)" as vip
+
+node "HAProxy + Keepalived Nodes\n(haproxy group)" as lb {
+  node "k8s-06\n(MASTER, worker + LB)" as k8s06
+  node "k8s-05\n(BACKUP, worker + LB)" as k8s05
+
+  component "HAProxy\n:6443" as hap
+  component "Keepalived\nVRRP" as kvd
+
+  k8s06 -[hidden]- k8s05
+}
+
+node "Controller Nodes" as ctrls {
+  node "k8s-01\n(k8s_controllers_init)" as c1
+  node "k8s-02\n(k8s_controllers)" as c2
+  node "k8s-03\n(k8s_controllers)" as c3
+
+  component "kube-apiserver" as apiserver
+  component "etcd" as etcd
+  component "kube-controller-manager" as kcm
+  component "kube-scheduler" as sched
+}
+
+node "Worker Nodes\n(k8s_workers)" as workers {
+  node "k8s-04" as w1
+  node "k8s-05-worker" as w2
+  node "k8s-06-worker" as w3
+
+  component "kubelet" as kubelet_workers
+  component "CNI: Cilium" as cilium
+}
+
+node "Kubernetes Cluster" as cluster {
+  component "Argo CD\n(argocd namespace)" as argocd
+  component "Root Application\nkubernetes-lab-root" as root_app
+  component "Applications\n(applications/*.yaml)" as apps
+}
+
+
+'-------------------------
+' Relationships
+'-------------------------
+
+op --> rebuild : triggers\nfull rebuild
+rebuild --> destroy : import first
+rebuild --> build   : import second
+
+build --> r_common
+build --> r_haproxy
+build --> r_keepalived
+build --> r_init
+build --> r_ctrl
+build --> r_worker
+build --> r_addons
+
+r_haproxy --> k8s06
+r_haproxy --> k8s05
+r_keepalived --> k8s06
+r_keepalived --> k8s05
+
+vip --> hap : VIP forwards\n6443
+hap --> c1 : proxy 6443
+hap --> c2
+hap --> c3
+
+r_init --> c1 : kubeadm init\ncontrol plane\n+ join tokens
+r_ctrl --> c2 : kubeadm join\n--control-plane
+r_ctrl --> c3 : kubeadm join\n--control-plane
+r_worker --> w1 : kubeadm join
+r_worker --> w2
+r_worker --> w3
+
+r_common --> c1
+r_common --> c2
+r_common --> c3
+r_common --> w1
+r_common --> w2
+r_common --> w3
+
+' Cluster internals
+c1 -[hidden]- c2
+c2 -[hidden]- c3
+
+apiserver -down- etcd
+apiserver -down- kcm
+apiserver -down- sched
+
+kubelet_workers -down- cilium
+
+' Addons + GitOps
+r_addons --> argocd : install via Helm
+r_addons --> cluster : waits for\nArgoCD core
+
+argocd --> root_app : manages
+root_app --> cfg_apps : points to\napplications/
+root_app --> cfg_projects
+root_app --> cfg_values
+root_app --> cfg_cluster
+
+argocd --> cluster : applies\nApplications
+
+git <- repo
+argocd --> git : pulls manifests\n(main branch)
+
+@enduml
