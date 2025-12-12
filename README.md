@@ -65,7 +65,7 @@ is a reliable, repeatable cluster build with as few opportunities for human-indu
 [//]: # (May go here if it is important to highlight security concerns.)
 
 This provides a vanilla Kubernetes cluster, without any security configuration. Security is configured in Kubernetes
-manifests.
+manifests, which live in kubernetes-lab-config.
 
 ## Background
 [//]: # (OPTIONAL)
@@ -100,7 +100,7 @@ To completely destroy and rebuild the cluster, run the rebuild playbook
 [//]: # (This is a space for ≥0 sections to be included,)
 [//]: # (each of which must have their own titles.)
 
-## Drydock
+## Future: Drydock
 
 Many modern infrastructure automation tools struggle with,
 - mutable infrastructure: no guarantees that repeated deployments will be *exactly* the same.
