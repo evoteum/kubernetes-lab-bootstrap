@@ -50,7 +50,7 @@ is a reliable, repeatable cluster build with as few opportunities for human-indu
 - [Background](#background)
 - [Install](#install)
 - [Usage](#usage)
-- [Drydock](#drydock)
+- [Future: Drydock](#future-drydock)
 - [Documentation](#documentation)
 - [Repository Configuration](#repository-configuration)
 - [Contributing](#contributing)
