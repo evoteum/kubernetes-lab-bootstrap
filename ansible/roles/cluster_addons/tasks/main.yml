@@ -9,6 +9,39 @@
     msg: "Kubeconfig {{ kubeconfig_path }} not found. Cannot install addons."
   when: not kubeconfig_file.stat.exists
 
+- name: Create directory for platform CRDs
+  file:
+    path: /opt/kubernetes/platform-crds
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Install Gateway API CRDs
+  copy:
+    src: gatewayapi-standard-install.yaml
+    dest: /opt/kubernetes/platform-crds/gateway-api-standard-install.yaml
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Apply Gateway API CRDs
+  command: >
+    kubectl --kubeconfig {{ kubeconfig_path }} apply -f /opt/kubernetes/platform-crds/gateway-api-standard-install.yaml
+  register: gateway_api_crds_apply
+  changed_when: gateway_api_crds_apply.rc == 0
+
+- name: Wait for Gateway API CRDs to be established
+  command: >
+    kubectl --kubeconfig {{ kubeconfig_path }} wait
+    --for=condition=Established
+    --timeout=60s
+    crd/gatewayclasses.gateway.networking.k8s.io
+    crd/gateways.gateway.networking.k8s.io
+    crd/httproutes.gateway.networking.k8s.io
+    crd/grpcroutes.gateway.networking.k8s.io
+    crd/referencegrants.gateway.networking.k8s.io
+
 - name: Add Helm repositories
   kubernetes.core.helm_repository:
     name: "{{ item.name }}"
