@@ -1,7 +1,5 @@
 #SPDX-License-Identifier: MIT-0
 ---
-# tasks file for roles/destroy
-
 - name: Gather installed package facts
   ansible.builtin.package_facts:
     manager: auto
@@ -29,10 +27,11 @@
     state: absent
   ignore_errors: true
 
-- name: kubeadm reset (only if kubeadm installed)
+- name: kubeadm reset
   ansible.builtin.command: kubeadm reset -f
   register: reset_out
   when: "'kubeadm' in ansible_facts.packages"
+  ignore_errors: true
 
 - name: Remove Kubernetes directories
   ansible.builtin.file:
@@ -59,7 +58,6 @@
     path: /home/ubuntu/.kube/config
     state: absent
 
-
 - name: Initialise unhold list
   ansible.builtin.set_fact:
     k8s_packages_to_unhold: []
@@ -71,7 +69,6 @@
   when:
     - item in ansible_facts.packages
 
-# Unhold only the packages that exist
 - name: Unhold Kubernetes packages (only if installed)
   ansible.builtin.dpkg_selections:
     name: "{{ item }}"
@@ -87,6 +84,12 @@
     purge: yes
   loop: "{{ k8s_packages_to_unhold }}"
 
+- name: Remove kubelet
+  ansible.builtin.file:
+    path: /etc/systemd/system/kubelet.service
+    state: absent
+  ignore_errors: true
+
 - name: Stop containerd service (only if present)
   ansible.builtin.service:
     name: containerd
@@ -94,11 +97,23 @@
     enabled: no
   when: "'containerd.service' in ansible_facts.services"
 
-- name: Remove kubelet systemd unit
-  ansible.builtin.file:
-    path: /etc/systemd/system/kubelet.service
+- name: Wait for unattended-upgrades to finish
+  ansible.builtin.wait_for:
+    path: /var/run/unattended-upgrades.pid
     state: absent
+    timeout: 600
   ignore_errors: true
+
+- name: Remove containerd
+  ansible.builtin.apt:
+    name: containerd.io
+    state: absent
+    purge: yes
+    lock_timeout: 600
+  register: containerd_remove
+  retries: 5
+  delay: 20
+  until: containerd_remove is succeeded
 
 - name: Remove containerd state directories
   ansible.builtin.file:
@@ -108,12 +123,6 @@
     - /var/lib/containerd
     - /run/containerd
     - /var/run/containerd
-
-- name: Remove containerd
-  ansible.builtin.apt:
-    name: containerd.io
-    state: absent
-    purge: yes
 
 - name: Remove CNI plugins
   ansible.builtin.file:
@@ -131,12 +140,15 @@
 
 - name: Flush iptables rules
   ansible.builtin.command: iptables -F
+  ignore_errors: true
 
 - name: Flush NAT iptables rules
   ansible.builtin.command: iptables -t nat -F
+  ignore_errors: true
 
 - name: Flush mangle table
   ansible.builtin.command: iptables -t mangle -F
+  ignore_errors: true
 
 - name: Flush raw table
   ansible.builtin.command: iptables -t raw -F
