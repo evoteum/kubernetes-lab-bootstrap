@@ -1,5 +1,9 @@
+- name: Align hostnames
+  hosts: all
+  roles:
+    - align_hostname
+
 - name: Prepare nodes with common configuration
-  serial: 1
   hosts: all
   roles:
     - common
@@ -24,10 +28,14 @@
     - controller
 
 - name: Join worker nodes
-  serial: 1
   hosts: k8s_workers
   roles:
     - worker
+
+- name: Configure Storage Nodes
+  hosts: k8s_storage
+  roles:
+    - storage
 
 - name: Install cluster addons
   serial: 1
