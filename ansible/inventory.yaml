@@ -26,6 +26,18 @@ all:
       ansible_host: 06.nodes.production.k8s.evoteum.com
       switch_port: 10
 
+    k8s-07:
+      ansible_host: 07.nodes.production.k8s.evoteum.com
+      switch_port: 20
+
+    k8s-08:
+      ansible_host: 08.nodes.production.k8s.evoteum.com
+      switch_port: 22
+
+    k8s-09:
+      ansible_host: 09.nodes.production.k8s.evoteum.com
+      switch_port: 24
+
 
   children:
     k8s_controllers_init:
@@ -40,6 +52,14 @@ all:
         k8s-04:
         k8s-05:
         k8s-06:
+        k8s-07:
+        k8s-08:
+        k8s-09:
+    k8s_storage:
+      hosts:
+        k8s-07:
+        k8s-08:
+        k8s-09:
     haproxy:
       hosts:
         k8s-06:
