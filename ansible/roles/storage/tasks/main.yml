@@ -1,0 +1,33 @@
+---
+- name: Get node
+  kubernetes.core.k8s_info:
+    kubeconfig: "{{ kubeconfig_path }}"
+    api_version: v1
+    kind: Node
+    name: "{{ inventory_hostname }}"
+  register: node_info
+  delegate_to: k8s-01
+
+- name: Label node if missing
+  kubernetes.core.k8s_json_patch:
+    kubeconfig: "{{ kubeconfig_path }}"
+    api_version: v1
+    kind: Node
+    name: "{{ inventory_hostname }}"
+    patch:
+      - op: add
+        path: /metadata/labels/role
+        value: storage
+  when: "'role' not in node_info.resources[0].metadata.labels"
+  delegate_to: k8s-01
+
+- name: Taint node for storage use only
+  kubernetes.core.k8s_taint:
+    kubeconfig: "{{ kubeconfig_path }}"
+    state: present
+    name: "{{ inventory_hostname }}"
+    taints:
+      - effect: NoSchedule
+        key: storage-only
+        value: "true"
+  delegate_to: k8s-01
