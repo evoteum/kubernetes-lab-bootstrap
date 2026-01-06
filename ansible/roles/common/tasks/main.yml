@@ -1,7 +1,3 @@
-#SPDX-License-Identifier: MIT-0
----
-# tasks file for common
-
 - name: Create .kube directory
   ansible.builtin.file:
     path: /home/ubuntu/.kube
