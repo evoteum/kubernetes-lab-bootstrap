@@ -1,0 +1,31 @@
+- name: Disable cloud-init hostname management
+  ansible.builtin.copy:
+    dest: /etc/cloud/cloud.cfg.d/99-preserve-hostname.cfg
+    content: |
+      preserve_hostname: true
+
+- name: Read current static hostname
+  ansible.builtin.command: hostnamectl --static
+  register: current_hostname
+  changed_when: false
+
+- name: Set static hostname if required
+  ansible.builtin.command: hostnamectl set-hostname {{ inventory_hostname }}
+  when: current_hostname.stdout != inventory_hostname
+  register: hostname_set
+
+- name: Ensure /etc/hostname is correct
+  ansible.builtin.copy:
+    dest: /etc/hostname
+    content: "{{ inventory_hostname }}\n"
+
+- name: Ensure /etc/hosts maps hostname locally
+  ansible.builtin.lineinfile:
+    path: /etc/hosts
+    regexp: '^127\.0\.1\.1\s+'
+    line: "127.0.1.1 {{ inventory_hostname }}"
+
+- name: Reboot if hostname changed
+  ansible.builtin.reboot:
+    reboot_timeout: 600
+  when: hostname_set is changed
