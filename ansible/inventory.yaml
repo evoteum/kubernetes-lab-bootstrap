@@ -60,6 +60,11 @@ all:
         k8s-07:
         k8s-08:
         k8s-09:
+    k8s_workload:
+      hosts:
+        k8s-04:
+        k8s-05:
+        k8s-06:
     haproxy:
       hosts:
         k8s-06:
